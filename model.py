@@ -3,8 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 
-from math import ceil 
-from utils import get_mask_from_lengths
+import torchsnooper
+# from math import ceil 
+# from utils import get_mask_from_lengths
 
 
 class LinearNorm(torch.nn.Module):
@@ -190,9 +191,8 @@ class Encoder_7(nn.Module):
         
         self.interp = InterpLnr(hparams)
 
-        
+    # @torchsnooper.snoop()
     def forward(self, x_f0):
-        
         x = x_f0[:, :self.dim_freq, :]
         f0 = x_f0[:, self.dim_freq:, :]
         
@@ -293,25 +293,47 @@ class Generator_3(nn.Module):
         self.freq_2 = hparams.freq_2
         self.freq_3 = hparams.freq_3
 
-
+    # x_f0
+    # @torchsnooper.snoop()
     def forward(self, x_f0, x_org, c_trg):
-        
+
         x_1 = x_f0.transpose(2,1)
+        # x_1 = x_1.float()
+        # print(x_1)
+        # Codes_x: Output Content encoder
+        # codes_f0: Output frequency encoder
         codes_x, codes_f0 = self.encoder_1(x_1)
-        code_exp_1 = codes_x.repeat_interleave(self.freq, dim=1)
-        code_exp_3 = codes_f0.repeat_interleave(self.freq_3, dim=1)
+        
+        # Repeat interleave -> Repeats each element freq times
+        code_exp_1 = codes_x #.repeat_interleave(self.freq, dim=1)
+        code_exp_3 = codes_f0 #.repeat_interleave(self.freq_3, dim=1)        
         
         x_2 = x_org.transpose(2,1)
+        # Encoder: Rhytm
         codes_2 = self.encoder_2(x_2, None)
-        code_exp_2 = codes_2.repeat_interleave(self.freq_2, dim=1)
+
+        # Repeat interleave -> Repeats each element freq times
+        code_exp_2 = codes_2 #.repeat_interleave(self.freq_2, dim=1)
+
+        # Old Concat
+        # Concatenates encoder outputs -> includes original embedding (c_trg)        
+        # encoder_outputs = torch.cat((code_exp_1, code_exp_2, code_exp_3, 
+        #                             c_trg.unsqueeze(1).expand(-1,x_1.size(-1),-1)), dim=-1)
         
-        encoder_outputs = torch.cat((code_exp_1, code_exp_2, code_exp_3, 
-                                     c_trg.unsqueeze(1).expand(-1,x_1.size(-1),-1)), dim=-1)
+        # New Concat. Reduces dimensions from 64k to 16k flat vector
+        encoder_flatten = torch.cat((code_exp_1, code_exp_2, code_exp_3), dim=-1).flatten()
+        encoder_outputs = torch.cat((encoder_flatten, c_trg.flatten()), dim=-1)
+
+        # TODO: Check encoder outputs distance
+        # Compare with Encoder (RTVC). Distance should be smaller.
+
+        # Create mels using decoder
+        # mel_outputs = self.decoder(encoder_outputs)
         
-        mel_outputs = self.decoder(encoder_outputs)
-        
-        return mel_outputs
-    
+        # change to encoder outputs for RTVC
+        # Returns: Concatenated encoder output, Content, Rhytm, Freq, Original
+        # return mel_outputs
+        return encoder_outputs, code_exp_1, code_exp_2, code_exp_3, c_trg
     
     def rhythm(self, x_org):
         x_2 = x_org.transpose(2,1)
@@ -337,10 +359,14 @@ class Generator_6(nn.Module):
     def forward(self, x_org, f0_trg):
         
         x_2 = x_org.transpose(2,1)
+        # Encoder: Rhytm
         codes_2 = self.encoder_2(x_2, None)
+
+        # Repeat interleave -> Repeats each element freq times
         code_exp_2 = codes_2.repeat_interleave(self.freq_2, dim=1)
         
         x_3 = f0_trg.transpose(2,1)
+        # Encoder: 
         codes_3 = self.encoder_3(x_3)
         code_exp_3 = codes_3.repeat_interleave(self.freq_3, dim=1)
         
@@ -382,24 +408,25 @@ class InterpLnr(nn.Module):
         if not self.training:
             return x
         
-        device = x.device
+        device = torch.cuda.current_device()
         batch_size = x.size(0)
         
         # indices of each sub segment
         indices = torch.arange(self.max_len_seg*2, device=device)\
                   .unsqueeze(0).expand(batch_size*self.max_num_seg, -1)
+        
         # scales of each sub segment
         scales = torch.rand(batch_size*self.max_num_seg, 
                             device=device) + 0.5
         
-        idx_scaled = indices / scales.unsqueeze(-1)
-        idx_scaled_fl = torch.floor(idx_scaled)
+        idx_scaled = indices.type(torch.float32) / scales.unsqueeze(-1).type(torch.float32)
+        idx_scaled_fl = torch.floor(idx_scaled).type(torch.float32)
         lambda_ = idx_scaled - idx_scaled_fl
         
         len_seg = torch.randint(low=self.min_len_seg, 
                                 high=self.max_len_seg, 
                                 size=(batch_size*self.max_num_seg,1),
-                                device=device)
+                                device=device).type(torch.float32)
         
         # end point of each segment
         idx_mask = idx_scaled_fl < (len_seg - 1)

@@ -24,6 +24,7 @@ def main(config):
     if not os.path.exists(config.sample_dir):
         os.makedirs(config.sample_dir)
 
+    torch.set_default_dtype(torch.float32)
     # Data loader.
     vcc_loader = get_loader(hparams)
     
@@ -45,7 +46,7 @@ if __name__ == '__main__':
     parser.add_argument('--resume_iters', type=int, default=None, help='resume training from this step')
 
     # Miscellaneous.
-    parser.add_argument('--use_tensorboard', type=str2bool, default=False)
+    parser.add_argument('--use_tensorboard', type=str2bool, default=True)
     parser.add_argument('--device_id', type=int, default=0)
 
     # Directories.

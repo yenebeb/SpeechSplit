@@ -1,3 +1,10 @@
+# Yen
+# Added to import tfcompat even when called from other directory
+import os, sys
+currentdir = os.path.dirname(os.path.realpath(__file__))
+sys.path.append(currentdir)
+###
+
 from tfcompat.hparam import HParams
 
 # NOTE: If you want full control for model architecture. please take a look
@@ -18,7 +25,7 @@ hparams = HParams(
     dim_enc_3 = 256,
     
     dim_freq = 80,
-    dim_spk_emb = 82,
+    dim_spk_emb = 256,
     dim_f0 = 257,
     dim_dec = 512,
     len_raw = 128,
@@ -34,7 +41,7 @@ hparams = HParams(
     # data loader
     root_dir = 'assets/spmel',
     feat_dir = 'assets/raptf0',
-    batch_size = 16,
+    batch_size = 32,
     mode = 'train',
     shuffle = True,
     num_workers = 0,
