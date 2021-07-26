@@ -5,6 +5,7 @@ import os
 import pickle
 import numpy as np
 from pathlib import Path
+from tqdm import tqdm
 
 # Real Time VOice Cloning encoder
 from encoder import inference as encoder
@@ -19,6 +20,7 @@ from utils import butter_highpass
 from utils import speaker_normalization
 from utils import pySTFT
 
+np.random.seed = 42
 # Root directory voices
 rootDir = '../LibriSpeech/train-clean-100'
 
@@ -38,7 +40,6 @@ b, a = butter_highpass(30, 16000, order=5)
 lo, hi = 50, 600
 #####
 
-num_uttrs = 10 # Number of utterances per speaker
 
 # Load encoder model (hardcoded for now)
 encoder_path = Path("../Real-Time-Voice-Cloning/encoder/saved_models/pretrained.pt")
@@ -47,11 +48,12 @@ encoder.load_model(encoder_path)
 
 speakers = []
 # Access all directories in rootDir, where name of directory is speaker
-for speaker in sorted(subdirList):
-    print('Processing speaker: %s' % speaker)
+for speaker in tqdm(sorted(subdirList)):
+    # print('Processing speaker: %s' % speaker)
     utterances = []
     utterances.append(speaker)
 
+    num_uttrs = 20 # Number of utterances per speaker
     # for train clean 100 we need to access next directory before accessing files:
     # _, lastDirList, _ = next(os.walk(os.path.join(dirName,speaker)))
 
@@ -60,41 +62,34 @@ for speaker in sorted(subdirList):
     # Get all wav files from speaker
     fileList = list(dirVoice.glob("**/*.flac"))
     
-    # use hardcoded onehot embeddings in order to be cosistent with the test speakers
-    # modify as needed
-    # may use generalized speaker embedding for zero-shot conversion
-
-    ## OLD 
-    # spkid = np.zeros((82,), dtype=np.float32)
-    # if speaker == 'p226':
-    #     spkid[1] = 1.0
-    # else:
-    #     spkid[7] = 1.0
-    # utterances.append(spkid)
-    ##
-
+    
     # Speaker embedding using GE2E encoder
     # make speaker embedding
-    assert len(fileList) >= num_uttrs
-    idx_uttrs = np.random.choice(len(fileList), size=num_uttrs, replace=False)
+    if(len(fileList) == 0):
+        continue
+    # idx_uttrs = np.random.choice(len(fileList), size=num_uttrs, replace=False)
     embs = []
     fileNameSaves = []
     prng = RandomState(int(os.path.basename(os.path.dirname(fileList[0]))[1:])) 
-    for i in range(num_uttrs):
-        fileName = str(os.path.basename(fileList[idx_uttrs[i]]))
+    for i in range(len(fileList)):
+        fileName = str(os.path.basename(fileList[i]))
         if not os.path.exists(os.path.join(targetDir, speaker)):
             os.makedirs(os.path.join(targetDir, speaker))
         if not os.path.exists(os.path.join(targetDir_f0, speaker)):
-            os.makedirs(os.path.join(targetDir_f0, speaker))    
+            os.makedirs(os.path.join(targetDir_f0, speaker)) 
+
+        if os.path.exists(os.path.join(targetDir, speaker, fileName[:-5])):
+            continue
+          
         # preproces and generate embedding
-        preprocessed_wav = encoder.preprocess_wav(fileList[idx_uttrs[i]])
-        embed = encoder.embed_utterance(preprocessed_wav)
+        preprocessed_wav = encoder.preprocess_wav(fileList[i])
+        embed = encoder.embed_utterance_old(preprocessed_wav)
         embs.append(embed)
     
         
 
         # read audio file
-        x, fs = sf.read(fileList[idx_uttrs[i]])
+        x, fs = sf.read(fileList[i])
         assert fs == 16000
         if x.shape[0] % 256 == 0:
             x = np.concatenate((x, np.array([1e-06])), axis=0)
@@ -115,12 +110,12 @@ for speaker in sorted(subdirList):
 
         assert len(S) == len(f0_rapt)
             
-        np.save(os.path.join(targetDir, speaker, fileName[:-4]),
+        np.save(os.path.join(targetDir, speaker, fileName[:-5]),
                 S.astype(np.float32), allow_pickle=False)    
-        np.save(os.path.join(targetDir_f0, speaker, fileName[:-4]),
+        np.save(os.path.join(targetDir_f0, speaker, fileName[:-5]),
                 f0_norm.astype(np.float32), allow_pickle=False)
-        fileNameSaves.append(os.path.join(speaker,fileName[:-4]))
-    utterances.append(np.mean(embs, axis=0))
+        fileNameSaves.append(os.path.join(speaker,fileName[:-5]))
+    utterances.append(embs)
 
     
     # create file list

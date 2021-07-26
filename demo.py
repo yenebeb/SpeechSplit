@@ -4,7 +4,7 @@ import torch
 import pickle
 import numpy as np
 
-from model import Generator_3 as Generator
+from model import Generator_3_Encode as Generator
 from model import Generator_6 as F0_Converter
 
 from utils import quantize_f0_torch
@@ -17,6 +17,9 @@ from hparams import hparams, hparams_debug_string
 
 import sys
 import umap
+
+from sklearn.decomposition import PCA
+
 sys.path.append('../Real-Time-Voice-Cloning/')
 # Real Time VOice Cloning encoder
 from encoder import inference as encoder
@@ -45,7 +48,7 @@ device = 'cuda:0'
 Interp = InterpLnr(hparams)
 
 G = Generator(hparams).eval().to(device)
-g_checkpoint = torch.load('assets/161000-G.ckpt', map_location=lambda storage, loc: storage)
+g_checkpoint = torch.load('assets/265000-G.ckpt', map_location=lambda storage, loc: storage)
 G.load_state_dict(g_checkpoint['model'])
 
 # P = F0_Converter(hparams).eval().to(device)
@@ -122,7 +125,7 @@ for output_index in range(len(outputs_name)):
                 speaker_all.append("Woman")
             else:
                 speaker_all.append("Man")
-
+            # speaker_all.append(speaker_save)
             # if(outputs_name[output_index] == "orig_emb"):
             # if(True):
             # Create path to speaker
@@ -189,14 +192,14 @@ for output_index in range(len(outputs_name)):
     reducer = umap.UMAP()
     projected_encoder_output = reducer.fit_transform(np.array(encoder_output))
 
-
-    sns.scatterplot(x=projected_encoder_output[:, 0], y=projected_encoder_output[:, 1], hue=speaker_all)
-    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0)
-
+    fig = plt.figure()
+    sns.scatterplot(x=projected_encoder_output[:, 0], y=projected_encoder_output[:, 1], hue=speaker_all, legend=False)
+    # plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0)
+    
     # plt.gca().set_aspect("equal", "datalim")
     plt.title("UMAP projection " + outputs_name[output_index])
     plt.savefig("Projection_" + outputs_name[output_index], bbox_inches='tight')
     plt.clf()
     print("Saved Plot: " + outputs_name[output_index])
-
+    exit()
     # exit()

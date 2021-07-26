@@ -294,7 +294,61 @@ class Generator_3(nn.Module):
         self.freq_3 = hparams.freq_3
 
     # x_f0
-    # @torchsnooper.snoop()
+    # Original Forward
+    def forward(self, x_f0, x_org, c_trg):
+
+        x_1 = x_f0.transpose(2,1)
+        
+        # Codes_x: Output Content encoder
+        # codes_f0: Output frequency encoder
+        codes_x, codes_f0 = self.encoder_1(x_1)
+        
+        # Repeat interleave -> Repeats each element freq times
+        code_exp_1 = codes_x.repeat_interleave(self.freq, dim=1)
+        code_exp_3 = codes_f0.repeat_interleave(self.freq_3, dim=1)        
+        
+        x_2 = x_org.transpose(2,1)
+        # Encoder: Rhytm
+        codes_2 = self.encoder_2(x_2, None)
+
+        # Repeat interleave -> Repeats each element freq times
+        code_exp_2 = codes_2.repeat_interleave(self.freq_2, dim=1)
+
+        # Old Concat
+        # Concatenates encoder outputs -> includes original embedding (c_trg)        
+        encoder_outputs = torch.cat((code_exp_1, code_exp_2, code_exp_3, 
+                                    c_trg.unsqueeze(1).expand(-1,x_1.size(-1),-1)), dim=-1)
+        
+        # TODO: Check encoder outputs distance
+        # Compare with Encoder (RTVC). Distance should be smaller.
+
+        # Create mels using decoder
+        mel_outputs = self.decoder(encoder_outputs)
+        
+        # change to encoder outputs for RTVC
+        # Returns: Concatenated encoder output, Content, Rhytm, Freq, Original
+        return mel_outputs
+
+    def rhythm(self, x_org):
+        x_2 = x_org.transpose(2,1)
+        codes_2 = self.encoder_2(x_2, None)
+        
+        return codes_2
+
+class Generator_3_Encode(nn.Module):
+    """SpeechSplit model"""
+    def __init__(self, hparams):
+        super().__init__()
+        
+        self.encoder_1 = Encoder_7(hparams)
+        self.encoder_2 = Encoder_t(hparams)
+        self.decoder = Decoder_3(hparams)
+    
+        self.freq = hparams.freq
+        self.freq_2 = hparams.freq_2
+        self.freq_3 = hparams.freq_3
+    
+    #Used for RTVC
     def forward(self, x_f0, x_org, c_trg):
 
         x_1 = x_f0.transpose(2,1)
@@ -305,34 +359,26 @@ class Generator_3(nn.Module):
         codes_x, codes_f0 = self.encoder_1(x_1)
         
         # Repeat interleave -> Repeats each element freq times
-        code_exp_1 = codes_x #.repeat_interleave(self.freq, dim=1)
-        code_exp_3 = codes_f0 #.repeat_interleave(self.freq_3, dim=1)        
+        code_exp_1 = torch.zeros_like(codes_x)
+        code_exp_3 = codes_f0  
         
         x_2 = x_org.transpose(2,1)
         # Encoder: Rhytm
         codes_2 = self.encoder_2(x_2, None)
 
         # Repeat interleave -> Repeats each element freq times
-        code_exp_2 = codes_2 #.repeat_interleave(self.freq_2, dim=1)
-
-        # Old Concat
-        # Concatenates encoder outputs -> includes original embedding (c_trg)        
-        # encoder_outputs = torch.cat((code_exp_1, code_exp_2, code_exp_3, 
-        #                             c_trg.unsqueeze(1).expand(-1,x_1.size(-1),-1)), dim=-1)
+        code_exp_2 = codes_2
         
         # New Concat. Reduces dimensions from 64k to 16k flat vector
         encoder_flatten = torch.cat((code_exp_1, code_exp_2, code_exp_3), dim=-1).flatten()
-        encoder_outputs = torch.cat((encoder_flatten, c_trg.flatten()), dim=-1)
+        encoder_outputs = encoder_flatten#torch.cat((encoder_flatten, c_trg.flatten()), dim=-1)
 
         # TODO: Check encoder outputs distance
         # Compare with Encoder (RTVC). Distance should be smaller.
-
-        # Create mels using decoder
-        # mel_outputs = self.decoder(encoder_outputs)
         
         # change to encoder outputs for RTVC
         # Returns: Concatenated encoder output, Content, Rhytm, Freq, Original
-        # return mel_outputs
+
         return encoder_outputs, code_exp_1, code_exp_2, code_exp_3, c_trg
     
     def rhythm(self, x_org):

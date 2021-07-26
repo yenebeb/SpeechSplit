@@ -28,7 +28,7 @@ class Utterances(data.Dataset):
         manager = Manager()
         meta = manager.list(meta)
         #len(meta)
-        dataset = manager.list(2510*[None])  # <-- can be shared between processes.
+        dataset = manager.list(10_000*[None])  # <-- can be shared between processes.
         
         # processes = []
         # for i in range(0, len(meta), self.step):
@@ -42,7 +42,7 @@ class Utterances(data.Dataset):
         self.load_data(meta, dataset, 0, mode)
             
         
-        # very importtant to do dataset = list(dataset)            
+        # very important to do dataset = list(dataset)            
         if mode == 'train':
             self.train_dataset = list(dataset)
             self.num_tokens = len(self.train_dataset)
@@ -58,13 +58,18 @@ class Utterances(data.Dataset):
         
     def load_data(self, submeta, dataset, idx_offset, mode):
         count = 0  
-        for k, sbmt in enumerate(submeta):    
+        for k, sbmt in enumerate(submeta):
+            if(count == 10_000):
+                break    
             uttrs = 3*[None]
             # fill in speaker id and embedding
             uttrs[0] = sbmt[0]
-            uttrs[1] = sbmt[1]
+            
+
+            # check that there are as many embeddings as speakers
+            assert(len(sbmt[2]) == len(sbmt[1]))
             # fill in data
-            for speaker_save in sbmt[2]:
+            for embedding, speaker_save in zip(sbmt[1], sbmt[2]):
                 sp_tmp = np.load(os.path.join(self.root_dir, speaker_save + ".npy"))
                 f0_tmp = np.load(os.path.join(self.feat_dir, speaker_save + ".npy"))
                 if self.mode == 'train':
@@ -75,11 +80,15 @@ class Utterances(data.Dataset):
                     f0_tmp = f0_tmp[:self.split]
                 else:
                     raise ValueError
+
+                uttrs[1] = embedding
                 uttrs[2] = ( sp_tmp, f0_tmp )
                 # dataset[idx_offset+k] = uttrs
                 # assert(not isinstance(uttrs, None))
                 dataset[count] = uttrs
                 count += 1
+                if(count == 10_000):
+                    break    
             
                    
         
@@ -111,13 +120,9 @@ class MyCollator(object):
         new_batch = []
         for token in batch:
             spk_id, aa, b, c = token
-            len_crop = np.random.randint(self.min_len_seq, self.max_len_seq+1, size=2) # 1.5s ~ 3s
+            len_crop = np.random.randint(self.min_len_seq, min(self.max_len_seq+1, len(aa)), size=2) # 1.5s ~ 3s
             
-            # make sure that randint high bound > randint low bound
-            if(len(aa)-len_crop[0] < 1):
-                left = np.random.randint(0, len(aa), size=2)
-            else:
-                left = np.random.randint(0, len(aa)-len_crop[0], size=2)
+            left = np.random.randint(0, len(aa)-len_crop[0], size=2)
             
             a = aa[left[0]:left[0]+len_crop[0], :]
             c = c[left[0]:left[0]+len_crop[0]]
