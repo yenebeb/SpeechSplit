@@ -92,11 +92,9 @@ class Utterances(data.Dataset):
                    
         
     def __getitem__(self, index):
-        print(index)
         dataset = self.train_dataset if self.mode == 'train' else self.test_dataset
         list_uttrs = dataset[index]
         
-        print(len(list_uttrs))
         # pick random uttr:
         rand_uttr = np.random.randint(len(list_uttrs))
         list_uttrs = list_uttrs[rand_uttr]
@@ -185,7 +183,7 @@ def get_loader(hparams):
     # Fix randomization random_split
     torch.manual_seed(0)
 
-    train_size = int(0.8 * len(dataset))
+    train_size = int(0.9 * len(dataset))
     test_size = len(dataset) - train_size
     train_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size, test_size])
 

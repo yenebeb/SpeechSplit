@@ -10,6 +10,7 @@ import os
 import time
 import datetime
 import pickle
+import math
 
 import sys
 sys.path.append('../')
@@ -135,6 +136,8 @@ class Solver(object):
         
         # Print logs in specified order
         keys = ['G/loss_id']
+        val_loss = math.inf
+        patience = 100
             
         # Start training.
         print('Start training...')
@@ -205,7 +208,7 @@ class Solver(object):
                         
             # Save model checkpoints.
             # Changed to only save 3 models in history. 
-            if (i+1) % self.model_save_step == 0:
+            if ((i+1) % self.model_save_step == 0) or val_loss < 0:
                 # 
                 files = sorted(os.listdir(self.model_save_dir), key = lambda x: int(x[:-7]))                
                 file_count = len(files)
@@ -229,6 +232,9 @@ class Solver(object):
                 plot = generate_plot.PlotGenerator(G_Enc, self.writer, None, i, [abs_path_root, abs_path_feat], hparams=self.hparams, speechsplit=True)
                 plot.plot_image()
                 print("Plotted images")
+
+                if(val_loss < 0):
+                    break
             
 
             # Validation.
@@ -266,13 +272,18 @@ class Solver(object):
                                                
                         x_identic_val = self.G(x_f0_intrp_org, x_real_pad, emb_org_val)
 
-                        g_loss_val = F.mse_loss(x_real_pad, x_identic_val, reduction='sum')
+                        g_loss_val = F.mse_loss(x_real_pad, x_identic_val, reduction='mean')
                         loss_val.append(g_loss_val.item())
                 
-                val_loss = np.mean(loss_val) 
-                print('Validation loss: {}'.format(val_loss))
+                val_loss_new = np.mean(loss_val)
+
+                if(val_loss_new < val_loss):
+                    val_loss = val_loss_new
+                    patience -= 1
+                    
+                print('Validation loss: {}'.format(val_loss_new))
                 if self.use_tensorboard:
-                    self.writer.add_scalar('Validation_loss', val_loss, i+1)
+                    self.writer.add_scalar('Validation_loss', val_loss_new, i+1)
                     
 
             # plot test samples

@@ -45,7 +45,7 @@ hparams = HParams(
     mode = 'train',
     shuffle = True,
     num_workers = 0,
-    samplier = 8,
+    samplier = 2,
     
 )
 
