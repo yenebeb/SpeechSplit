@@ -219,7 +219,6 @@ class Solver(object):
                 
                 print('Saved model checkpoints into {}...'.format(self.model_save_dir))
 
-            
                 # Plot Embedding Freq
                 G_Enc = Generator_3_Encode(self.hparams).eval().to(self.device)
                 g_enc_checkpoint = torch.load(G_path, map_location=lambda storage, loc: storage)

@@ -92,9 +92,11 @@ class Utterances(data.Dataset):
                    
         
     def __getitem__(self, index):
+        print(index)
         dataset = self.train_dataset if self.mode == 'train' else self.test_dataset
         list_uttrs = dataset[index]
         
+        print(len(list_uttrs))
         # pick random uttr:
         rand_uttr = np.random.randint(len(list_uttrs))
         list_uttrs = list_uttrs[rand_uttr]
