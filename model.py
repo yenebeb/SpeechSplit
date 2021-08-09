@@ -352,34 +352,21 @@ class Generator_3_Encode(nn.Module):
     def forward(self, x_f0, x_org, c_trg):
 
         x_1 = x_f0.transpose(2,1)
-        # x_1 = x_1.float()
-        # print(x_1)
+        
         # Codes_x: Output Content encoder
         # codes_f0: Output frequency encoder
-        codes_x, codes_f0 = self.encoder_1(x_1)
-        
-        # Repeat interleave -> Repeats each element freq times
-        code_exp_1 = torch.zeros_like(codes_x)
-        code_exp_3 = codes_f0  
-        
+        cont_enc, freq_enc = self.encoder_1(x_1)
+
         x_2 = x_org.transpose(2,1)
         # Encoder: Rhytm
-        codes_2 = self.encoder_2(x_2, None)
+        rhytm_enc = self.encoder_2(x_2, None)
 
-        # Repeat interleave -> Repeats each element freq times
-        code_exp_2 = codes_2
-        
         # New Concat. Reduces dimensions from 64k to 16k flat vector
-        encoder_flatten = torch.cat((code_exp_1, code_exp_2, code_exp_3), dim=-1).flatten()
-        encoder_outputs = encoder_flatten#torch.cat((encoder_flatten, c_trg.flatten()), dim=-1)
-
-        # TODO: Check encoder outputs distance
-        # Compare with Encoder (RTVC). Distance should be smaller.
+        encoder_flatten = torch.cat((cont_enc, rhytm_enc, freq_enc), dim=-1).flatten()
+        encoder_outputs = encoder_flatten
         
-        # change to encoder outputs for RTVC
         # Returns: Concatenated encoder output, Content, Rhytm, Freq, Original
-
-        return encoder_outputs, code_exp_1, code_exp_2, code_exp_3, c_trg
+        return encoder_outputs, cont_enc, rhytm_enc, freq_enc, c_trg
     
     def rhythm(self, x_org):
         x_2 = x_org.transpose(2,1)

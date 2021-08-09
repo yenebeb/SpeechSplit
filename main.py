@@ -39,7 +39,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
    
     # Training configuration.
-    parser.add_argument('--num_iters', type=int, default=1000000, help='number of total iterations')
+    parser.add_argument('--num_iters', type=int, default=20_000, help='number of total iterations')
     parser.add_argument('--g_lr', type=float, default=0.0001, help='learning rate for G')
     parser.add_argument('--beta1', type=float, default=0.9, help='beta1 for Adam optimizer')
     parser.add_argument('--beta2', type=float, default=0.999, help='beta2 for Adam optimizer')
@@ -56,7 +56,7 @@ if __name__ == '__main__':
 
     # Step size.
     parser.add_argument('--log_step', type=int, default=10)
-    parser.add_argument('--sample_step', type=int, default=1000)
+    parser.add_argument('--sample_step', type=int, default=2000)
     parser.add_argument('--model_save_step', type=int, default=1000)
 
     config = parser.parse_args()

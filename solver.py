@@ -1,4 +1,6 @@
+from torch.utils.tensorboard.summary import hparams
 from model import Generator_3 as Generator
+from model import Generator_3_Encode 
 from model import InterpLnr
 import matplotlib.pyplot as plt
 import torch
@@ -9,7 +11,10 @@ import time
 import datetime
 import pickle
 
+import sys
+sys.path.append('../')
 from utils import pad_seq_to_2, quantize_f0_torch, quantize_f0_numpy
+from autovc import generate_plot
 
 # use demo data for simplicity
 # make your own validation set as needed
@@ -41,7 +46,7 @@ class Solver(object):
         self.log_dir = config.log_dir
         self.sample_dir = config.sample_dir
         self.model_save_dir = config.model_save_dir
-
+        
         # Step size.
         self.log_step = config.log_step
         self.sample_step = config.sample_step
@@ -202,17 +207,29 @@ class Solver(object):
             # Changed to only save 3 models in history. 
             if (i+1) % self.model_save_step == 0:
                 # 
+                files = sorted(os.listdir(self.model_save_dir), key = lambda x: int(x[:-7]))                
+                file_count = len(files)
+                
+                if(file_count > 2):
+                    os.remove(os.path.join(self.model_save_dir, files[0]))
+                
                 G_path = os.path.join(self.model_save_dir, '{}-G.ckpt'.format(i+1))
                 torch.save({'model': self.G.state_dict(),
                             'optimizer': self.g_optimizer.state_dict()}, G_path)
                 
-                files = sorted(os.listdir(self.model_save_dir))                
-                file_count = len(files)
-                
-                #todo: gaat nog fout?
-                if(file_count >3):
-                    os.remove(os.path.join(self.model_save_dir, files[0]))
                 print('Saved model checkpoints into {}...'.format(self.model_save_dir))
+
+            
+                # Plot Embedding Freq
+                G_Enc = Generator_3_Encode(self.hparams).eval().to(self.device)
+                g_enc_checkpoint = torch.load(G_path, map_location=lambda storage, loc: storage)
+                G_Enc.load_state_dict(g_enc_checkpoint['model'])
+
+                abs_path_root = os.path.abspath(self.hparams.root_dir)
+                abs_path_feat = os.path.abspath(self.hparams.feat_dir)
+                plot = generate_plot.PlotGenerator(G_Enc, self.writer, None, i, [abs_path_root, abs_path_feat], hparams=self.hparams, speechsplit=True)
+                plot.plot_image()
+                print("Plotted images")
             
 
             # Validation.
@@ -252,6 +269,7 @@ class Solver(object):
 
                         g_loss_val = F.mse_loss(x_real_pad, x_identic_val, reduction='sum')
                         loss_val.append(g_loss_val.item())
+                
                 val_loss = np.mean(loss_val) 
                 print('Validation loss: {}'.format(val_loss))
                 if self.use_tensorboard:
@@ -321,12 +339,21 @@ class Solver(object):
                         max_value = np.max(np.hstack([melsp_gd_pad, melsp_out, melsp_woF, melsp_woR, melsp_woC]))
                         
                         fig, (ax1,ax2,ax3,ax4,ax5) = plt.subplots(5, 1, sharex=True)
+                        # ax1.set_title("Original Spectogram")
+                        # ax2.set_title("Generated Spectogram")
+                        # ax3.set_title("Without Content")
+                        # ax4.set_title("Without Rhytm")
+                        # ax5.set_title("Without Pitch")
+
                         im1 = ax1.imshow(melsp_gd_pad, aspect='auto', vmin=min_value, vmax=max_value)
                         im2 = ax2.imshow(melsp_out, aspect='auto', vmin=min_value, vmax=max_value)
                         im3 = ax3.imshow(melsp_woC, aspect='auto', vmin=min_value, vmax=max_value)
                         im4 = ax4.imshow(melsp_woR, aspect='auto', vmin=min_value, vmax=max_value)
                         im5 = ax5.imshow(melsp_woF, aspect='auto', vmin=min_value, vmax=max_value)
-                        plt.savefig(f'{self.sample_dir}/{i+1}_{spkr[0]}_.png', dpi=150)
+                        
+                        plt.savefig(f'{self.sample_dir}/{i+1}_{spkr[0]}_.png', dpi=200)
                         plt.close(fig)
 
                         samples += 1
+                    
+                    

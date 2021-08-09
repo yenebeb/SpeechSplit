@@ -14,11 +14,11 @@ from tfcompat.hparam import HParams
 hparams = HParams(
     # model   
     freq = 8,
-    dim_neck = 8,
+    dim_neck = 48, # 8 Content
     freq_2 = 8,
-    dim_neck_2 = 1,
+    dim_neck_2 = 6, # 1 Rhytm
     freq_3 = 8,
-    dim_neck_3 = 32,
+    dim_neck_3 = 64, # 16 Pitch
     
     dim_enc = 512,
     dim_enc_2 = 128,
@@ -34,9 +34,9 @@ hparams = HParams(
     # interp
     min_len_seg = 19,
     max_len_seg = 32,
-    min_len_seq = 64,
-    max_len_seq = 128,
-    max_len_pad = 192,
+    min_len_seq = 128, # 64
+    max_len_seq = 256, # 128
+    max_len_pad = 320, # 192
     
     # data loader
     root_dir = 'assets/spmel',

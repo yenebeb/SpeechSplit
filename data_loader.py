@@ -27,19 +27,19 @@ class Utterances(data.Dataset):
         
         manager = Manager()
         meta = manager.list(meta)
-        #len(meta)
-        dataset = manager.list(10_000*[None])  # <-- can be shared between processes.
+       
+        dataset = manager.list(len(meta)*[None])  # <-- can be shared between processes.
         
-        # processes = []
-        # for i in range(0, len(meta), self.step):
-        #     p = Process(target=self.load_data, 
-        #                 args=(meta[i:i+self.step],dataset,i,mode))  
-        #     p.start()
-        #     processes.append(p)
-        # for p in processes:
-        #     p.join()
+        processes = []
+        for i in range(0, len(meta), self.step):
+            p = Process(target=self.load_data, 
+                        args=(meta[i:i+self.step],dataset,i,mode))  
+            p.start()
+            processes.append(p)
+        for p in processes:
+            p.join()
 
-        self.load_data(meta, dataset, 0, mode)
+        # self.load_data(meta, dataset, 0, mode)
             
         
         # very important to do dataset = list(dataset)            
@@ -59,8 +59,7 @@ class Utterances(data.Dataset):
     def load_data(self, submeta, dataset, idx_offset, mode):
         count = 0  
         for k, sbmt in enumerate(submeta):
-            if(count == 10_000):
-                break    
+            uttrs_list = len(sbmt[2]) * [None]
             uttrs = 3*[None]
             # fill in speaker id and embedding
             uttrs[0] = sbmt[0]
@@ -69,7 +68,7 @@ class Utterances(data.Dataset):
             # check that there are as many embeddings as speakers
             assert(len(sbmt[2]) == len(sbmt[1]))
             # fill in data
-            for embedding, speaker_save in zip(sbmt[1], sbmt[2]):
+            for i, (embedding, speaker_save) in enumerate(zip(sbmt[1], sbmt[2])):
                 sp_tmp = np.load(os.path.join(self.root_dir, speaker_save + ".npy"))
                 f0_tmp = np.load(os.path.join(self.feat_dir, speaker_save + ".npy"))
                 if self.mode == 'train':
@@ -83,18 +82,22 @@ class Utterances(data.Dataset):
 
                 uttrs[1] = embedding
                 uttrs[2] = ( sp_tmp, f0_tmp )
-                # dataset[idx_offset+k] = uttrs
-                # assert(not isinstance(uttrs, None))
-                dataset[count] = uttrs
-                count += 1
-                if(count == 10_000):
-                    break    
+                uttrs_list[i] = uttrs
+
+            dataset[idx_offset+k] = uttrs_list
+            # assert(not isinstance(uttrs_list, None))
+            # dataset[count] = uttrs
+            # count += 1
             
                    
         
     def __getitem__(self, index):
         dataset = self.train_dataset if self.mode == 'train' else self.test_dataset
         list_uttrs = dataset[index]
+        
+        # pick random uttr:
+        rand_uttr = np.random.randint(len(list_uttrs))
+        list_uttrs = list_uttrs[rand_uttr]
 
         spk_id_org = list_uttrs[0]
         emb_org = list_uttrs[1]
@@ -120,7 +123,7 @@ class MyCollator(object):
         new_batch = []
         for token in batch:
             spk_id, aa, b, c = token
-            len_crop = np.random.randint(self.min_len_seq, min(self.max_len_seq+1, len(aa)), size=2) # 1.5s ~ 3s
+            len_crop = np.random.randint(min(self.min_len_seq, len(aa)-1), min(self.max_len_seq+1, len(aa)), size=2) # 1.5s ~ 3s
             
             left = np.random.randint(0, len(aa)-len_crop[0], size=2)
             

@@ -7,7 +7,7 @@ import numpy as np
 from pathlib import Path
 from tqdm import tqdm
 
-# Real Time VOice Cloning encoder
+# Real Time Voice Cloning encoder
 from encoder import inference as encoder
 
 # make spect f0 imports
@@ -20,7 +20,45 @@ from utils import butter_highpass
 from utils import speaker_normalization
 from utils import pySTFT
 
+
+def prep_wav(wav_file):
+    # read audio file
+    x, fs = sf.read(wav_file)
+    assert fs == 16000
+
+    # make sure both f0 and spectogram get same length by padding
+    if x.shape[0] % 256 == 0:
+        x = np.concatenate((x, np.array([1e-06])), axis=0)
+    # add some random noise for robustness        
+    wav = x * 0.96 + (prng.rand(x.shape[0])-0.5)*1e-06
+    
+    return wav, fs
+
+def create_specto(wav, mel_basis, min_level):
+    
+    # compute spectrogram
+    D = pySTFT(wav).T
+    D_mel = np.dot(D, mel_basis)
+    D_db = 20 * np.log10(np.maximum(min_level, D_mel)) - 16
+    S = (D_db + 100) / 100
+
+    return S
+
+def extract_f0(wav, fs):
+    # min/max fundamental frequency
+    lo, hi = 50, 500
+
+    # extract f0
+    f0_rapt = sptk.rapt(wav.astype(np.float32), fs, 256, min=lo, max=hi, otype=2)
+    index_nonzero = (f0_rapt != -1e10)
+    mean_f0, std_f0 = np.mean(f0_rapt[index_nonzero]), np.std(f0_rapt[index_nonzero])
+    f0_norm = speaker_normalization(f0_rapt, index_nonzero, mean_f0, std_f0)
+
+    return f0_rapt, f0_norm
+
+
 np.random.seed = 42
+
 # Root directory voices
 rootDir = '../LibriSpeech/train-clean-100'
 
@@ -35,79 +73,56 @@ print('Found directory: %s' % dirName)
 #####
 mel_basis = mel(16000, 1024, fmin=90, fmax=7600, n_mels=80).T
 min_level = np.exp(-100 / 20 * np.log(10))
-b, a = butter_highpass(30, 16000, order=5)
-# min/max fundamental frequency taken from original code and combined in 1
-lo, hi = 50, 600
-#####
 
+#####
 
 # Load encoder model (hardcoded for now)
 encoder_path = Path("../Real-Time-Voice-Cloning/encoder/saved_models/pretrained.pt")
 encoder.load_model(encoder_path)
 
-
 speakers = []
 # Access all directories in rootDir, where name of directory is speaker
 for speaker in tqdm(sorted(subdirList)):
-    # print('Processing speaker: %s' % speaker)
     utterances = []
     utterances.append(speaker)
-
-    num_uttrs = 20 # Number of utterances per speaker
-    # for train clean 100 we need to access next directory before accessing files:
-    # _, lastDirList, _ = next(os.walk(os.path.join(dirName,speaker)))
-
+   
     # Create path to speaker
     dirVoice = Path(os.path.join(dirName,speaker))
     # Get all wav files from speaker
     fileList = list(dirVoice.glob("**/*.flac"))
     
-    
-    # Speaker embedding using GE2E encoder
-    # make speaker embedding
+    # Check if list contains files
     if(len(fileList) == 0):
         continue
-    # idx_uttrs = np.random.choice(len(fileList), size=num_uttrs, replace=False)
+
+    
     embs = []
     fileNameSaves = []
-    prng = RandomState(int(os.path.basename(os.path.dirname(fileList[0]))[1:])) 
+
+    prng = RandomState(int(os.path.basename(os.path.dirname(fileList[0]))[1:]))
     for i in range(len(fileList)):
         fileName = str(os.path.basename(fileList[i]))
+
+        # Create Directories if they do not exist
         if not os.path.exists(os.path.join(targetDir, speaker)):
             os.makedirs(os.path.join(targetDir, speaker))
         if not os.path.exists(os.path.join(targetDir_f0, speaker)):
             os.makedirs(os.path.join(targetDir_f0, speaker)) 
 
-        if os.path.exists(os.path.join(targetDir, speaker, fileName[:-5])):
-            continue
-          
+        # If rewrite is off skip already written files
+        # if os.path.exists(os.path.join(targetDir, speaker, fileName[:-5])):
+        #     continue
+        
+        # Speaker embedding using GE2E encoder
         # preproces and generate embedding
         preprocessed_wav = encoder.preprocess_wav(fileList[i])
         embed = encoder.embed_utterance_old(preprocessed_wav)
-        embs.append(embed)
-    
+        embs.append(embed)        
+
+        wav, fs = prep_wav(fileList[i])
+        S = create_specto(wav, mel_basis, min_level)
         
-
-        # read audio file
-        x, fs = sf.read(fileList[i])
-        assert fs == 16000
-        if x.shape[0] % 256 == 0:
-            x = np.concatenate((x, np.array([1e-06])), axis=0)
-        y = signal.filtfilt(b, a, x)
-        wav = y * 0.96 + (prng.rand(y.shape[0])-0.5)*1e-06
-
-        # compute spectrogram
-        D = pySTFT(wav).T
-        D_mel = np.dot(D, mel_basis)
-        D_db = 20 * np.log10(np.maximum(min_level, D_mel)) - 16
-        S = (D_db + 100) / 100        
-
-        # extract f0
-        f0_rapt = sptk.rapt(wav.astype(np.float32)*32768, fs, 256, min=lo, max=hi, otype=2)
-        index_nonzero = (f0_rapt != -1e10)
-        mean_f0, std_f0 = np.mean(f0_rapt[index_nonzero]), np.std(f0_rapt[index_nonzero])
-        f0_norm = speaker_normalization(f0_rapt, index_nonzero, mean_f0, std_f0)
-
+        f0_rapt, f0_norm = extract_f0(wav, fs)
         assert len(S) == len(f0_rapt)
             
         np.save(os.path.join(targetDir, speaker, fileName[:-5]),
